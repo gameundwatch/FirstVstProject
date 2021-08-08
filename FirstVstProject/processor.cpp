@@ -13,6 +13,7 @@ namespace Steinberg {
 		// =================================================================================
 		MyVSTProcessor::MyVSTProcessor()
 		{
+
 			// コントローラーのFUIDを設定する
 			setControllerClass(ControllerUID);
 		}
@@ -36,7 +37,7 @@ namespace Steinberg {
 				// 以下固有の初期化を実施。
 				// 今回は何もしない
 
-				pregain = 0.0f;
+				postgain = 0.0f;
 
 			}
 
@@ -54,6 +55,78 @@ namespace Steinberg {
 
 			// 対応していないバス構成の場合、kResultFalseを返す。
 			return kResultFalse;
+		}
+
+		// 状態のSetterとGetter
+
+		tresult PLUGIN_API MyVSTProcessor::setState(IBStream* state)
+		{
+			// 現在のProcessorクラスの状態を読込
+			if (!state) {
+				return kResultFalse;
+			}
+			// 保存されているデータを読み込む
+			float savedFreq = 1.0f;
+			float savedQ = 0.5f;
+			float savedType = 0.0f;
+			float savedPostGain = 0.0f;
+			float savedInvert = 0.0f;
+			float savedMix = 1.0f;
+
+			IBStreamer streamer(state, kLittleEndian);
+
+			// 読込に失敗した場合はkResultFalseを返す。
+			if (!streamer.readFloat(savedFreq))
+				return kResultFalse;
+			if (!streamer.readFloat(savedQ))
+				return kResultFalse;
+			if (!streamer.readFloat(savedType))
+				return kResultFalse;
+			if (!streamer.readFloat(savedPostGain))
+				return kResultFalse;
+			if (!streamer.readFloat(savedInvert))
+				return kResultFalse;
+			if (!streamer.readFloat(savedMix))
+				return kResultFalse;
+
+			freq = savedFreq;
+			q = savedQ;
+			type = savedType;
+			postgain = savedPostGain;
+			invert = savedInvert;
+			mix = savedMix;
+
+			// 関数の処理に問題がなければkResultOkを返す
+			return kResultOk;
+		}
+
+		tresult PLUGIN_API MyVSTProcessor::getState(IBStream* state)
+		{
+			// 現在のProcessorクラスの状態を保存
+			if (!state) {
+				return kResultFalse;
+			}
+
+			float	toSaveFreq = freq;
+			float	toSaveQ = q;
+			float	toSaveType = type;
+			float	toSavePostGain = postgain;
+			float	toSaveInvert = invert;
+			float	toSaveMix = mix;
+
+			IBStreamer streamer(state, kLittleEndian);
+
+			// データを保存する
+
+			streamer.writeFloat(toSaveFreq);
+			streamer.writeFloat(toSaveQ);
+			streamer.writeFloat(toSaveType);
+			streamer.writeFloat(toSavePostGain);
+			streamer.writeFloat(toSaveInvert);
+			streamer.writeFloat(toSaveMix);
+
+			// 関数の処理に問題がなければkResultOkを返す
+			return kResultOk;
 		}
 
 		// ===================================================================================
@@ -92,10 +165,10 @@ namespace Steinberg {
 							// tagに応じた処理を実施
 							switch (tag)
 							{
-							case PARAM_PREGAIN_TAG:
+							case PARAM_POSTGAIN_TAG:
 								// Gainを変更する
 								// 
-								pregain = 10.0f * pow(value, 3.0f);
+								postgain = 10.0f * pow(value, 3.0f);
 								break;
 							case PARAM_FILTERFREQ_TAG:
 								// Freqを変更する
@@ -109,10 +182,38 @@ namespace Steinberg {
 								q = ((12.0f - 0.5f) * value) + 0.5f; // 0.5～12.0の間に変更
 								break;
 
+							case PARAM_FILTERTYPE_TAG:
+								type = (int32)(value * 2.0f);
+								break;
+
+							case PARAM_INV_TAG:
+								invert = (int32)value;
+								break;
+
+							case PARAM_MIX_TAG:
+								mix = value;
+								break;
 							}
-							// 変更されたパラメータに応じてフィルタ係数を再計算する
-							filterL.LowPassGate(freq, q);
-							filterR.LowPassGate(freq, q);
+
+							switch ((int32)type)
+							{
+							case 0: // LPF
+								// 変更されたパラメータに応じてフィルタ係数を再計算する
+								filterL.LowPassGate(freq, q);
+								filterR.LowPassGate(freq, q);
+								break;
+							case 1: // HPF
+								// 変更されたパラメータに応じてフィルタ係数を再計算する
+								filterL.HiPassGate(freq, q);
+								filterR.HiPassGate(freq, q);
+								break;
+							case 2: // BPF
+								// 変更されたパラメータに応じてフィルタ係数を再計算する
+								filterL.BandPassGate(freq, q);
+								filterR.BandPassGate(freq, q);
+								break;
+							}
+
 						}
 					}
 				}
@@ -127,12 +228,22 @@ namespace Steinberg {
 				Sample32* outR = data.outputs[0].channelBuffers32[1];
 
 				// numSamplesで示されるサンプル分、音声を処理する
-				for (int32 i = 0; i < data.numSamples; i++)
-				{
+				for (int32 i = 0; i < data.numSamples; i++) {
+
 					outL[i] = filterL.Process(inL[i]);
 					outR[i] = filterR.Process(inR[i]);
-					outL[i] = pregain * outL[i];
-					outR[i] = pregain * outR[i];
+
+					outL[i] = postgain * outL[i];
+					outR[i] = postgain * outR[i];
+
+					if (invert == 1) {
+						outL[i] *= -1.0f;
+						outR[i] *= -1.0f;
+					}
+
+					outL[i] = outL[i] * mix + inL[i] * (1.0 - mix);
+					outR[i] = outR[i] * mix + inR[i] * (1.0 - mix);
+
 				}
 				// 問題なければkResultTrueを返す(おそらく必ずkResultTrueを返す)
 				return kResultTrue;

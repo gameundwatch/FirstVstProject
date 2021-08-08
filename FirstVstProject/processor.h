@@ -2,6 +2,9 @@
 // VST3 SDKのインクルードファイル
 #include "public.sdk/source/vst/vstaudioeffect.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
+#include "pluginterfaces/base/ibstream.h"
+#include "base/source/fstreamer.h"
+
 #include "FilterGate.h"
 
 // VST3作成に必要なの名前空間を使用
@@ -14,9 +17,14 @@ namespace Steinberg {
 		class MyVSTProcessor : public AudioEffect
 		{
 		protected:
-			ParamValue pregain;
 			ParamValue freq;
 			ParamValue q;
+			ParamValue type;
+
+			ParamValue postgain;
+			ParamValue invert;
+			ParamValue mix;
+
 			FilterGate filterL, filterR; 
 		public:
 			// コンストラクタ
@@ -27,6 +35,10 @@ namespace Steinberg {
 
 			// バス構成を設定する関数。
 			tresult PLUGIN_API setBusArrangements(SpeakerArrangement* inputs, int32 numIns, SpeakerArrangement* outputs, int32 numOuts);
+
+			// Processorクラスの状態の読込と保存する関数
+			tresult PLUGIN_API getState(IBStream* state);
+			tresult PLUGIN_API setState(IBStream* state);
 
 			// 音声信号を処理する関数(必須)
 			tresult PLUGIN_API process(ProcessData& data);

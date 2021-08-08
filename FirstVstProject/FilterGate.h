@@ -35,6 +35,8 @@ public:
 
 	// フィルタ係数を計算するメンバー関数
 	inline void LowPassGate(float freq, float q, float samplerate = 44100.0f);
+	inline void HiPassGate(float freq, float q, float samplerate = 44100.0f);
+	inline void BandPassGate(float freq, float q, float samplerate = 44100.0f);
 
 };
 
@@ -134,6 +136,46 @@ void FilterGate::LowPassGate(float freq, float q, float samplerate)
 	b0 = (1.0f - cos(omega)) / 2.0f;
 	b1 = 1.0f - cos(omega);
 	b2 = (1.0f - cos(omega)) / 2.0f;
+
+	// 周波数からゲートしきい値のセット
+	// 低周波になればゲートのしきい値が上がるようになるため
+	threshold = -1.0f * pow((freq - 20.0f) / (22000.0f - 20.0f), 1.0f / 4.0f) + 1.0f;
+
+}
+
+void FilterGate::HiPassGate(float freq, float q, float samplerate)
+{
+	// フィルタ係数計算で使用する中間値を求める。
+	float omega = 2.0f * 3.14159265f * freq / samplerate;
+	float alpha = sin(omega) / (2.0f * q);
+
+	// フィルタ係数を求める。
+	a0 = 1.0f + alpha;
+	a1 = -2.0f * cos(omega);
+	a2 = 1.0f - alpha;
+	b0 = (1.0f + cos(omega)) / 2.0f;
+	b1 = - (1.0f + cos(omega));
+	b2 = (1.0f + cos(omega)) / 2.0f;
+
+	// 周波数からゲートしきい値のセット
+	// 低周波になればゲートのしきい値が上がるようになるため
+	threshold = -1.0f * pow((freq - 20.0f) / (22000.0f - 20.0f), 1.0f / 4.0f) + 1.0f;
+
+}
+
+void FilterGate::BandPassGate(float freq, float q, float samplerate)
+{
+	// フィルタ係数計算で使用する中間値を求める。
+	float omega = 2.0f * 3.14159265f * freq / samplerate;
+	float alpha = sin(omega) / (2.0f * q);
+
+	// フィルタ係数を求める。
+	a0 = 1.0f + alpha;
+	a1 = -2.0f * cos(omega);
+	a2 = 1.0f - alpha;
+	b0 = alpha;
+	b1 = 0.0f;
+	b2 = -alpha;
 
 	// 周波数からゲートしきい値のセット
 	// 低周波になればゲートのしきい値が上がるようになるため
